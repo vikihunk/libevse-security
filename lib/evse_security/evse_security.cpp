@@ -106,6 +106,10 @@ static fs::path get_private_key_path_of_certificate(const X509Wrapper& certifica
                     std::string private_key;
 
                     if (filesystem_utils::read_from_file(potential_keyfile, private_key)) {
+                        if (private_key.find("pkcs11") != std::string::npos) {
+                            EVLOG_info << "Found pkcs11 key at path " << potential_keyfile;
+                            return potential_keyfile;
+                        }
                         if (KeyValidationResult::Valid ==
                             CryptoSupplier::x509_check_private_key(certificate.get(), private_key, password)) {
                             EVLOG_debug << "Key found for certificate at path: " << potential_keyfile;
@@ -127,6 +131,10 @@ static fs::path get_private_key_path_of_certificate(const X509Wrapper& certifica
                     std::string private_key;
 
                     if (filesystem_utils::read_from_file(key_file_path, private_key)) {
+                        if (private_key.find("pkcs11") != std::string::npos) {
+                            EVLOG_info << "Found pkcs11 key at path: " << key_file_path;
+                            return key_file_path;
+                        }
                         if (KeyValidationResult::Valid ==
                             CryptoSupplier::x509_check_private_key(certificate.get(), private_key, password)) {
                             EVLOG_debug << "Key found for certificate at path: " << key_file_path;
