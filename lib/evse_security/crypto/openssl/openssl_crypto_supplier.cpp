@@ -571,7 +571,13 @@ KeyValidationResult OpenSSLSupplier::x509_check_private_key(X509Handle* handle, 
     }
     EVLOG_debug << "Is Custom Key: " << custom_key;
 
-    BIO_ptr bio(BIO_new_mem_buf(private_key.c_str(), -1));
+    //BIO_ptr bio(BIO_new_mem_buf(private_key.c_str(), -1));
+    //using the URI as filename
+    BIO_ptr bio(BIO_new_file(private_key.c_str(), "r"));
+    if (!bio) {
+			EVLOG_error << "Faild to read private key URI: %s\n" << private_key.c_str();
+			return KeyValidationResult::KeyLoadFailure;
+    }
     // Passing password string since if NULL is provided, the password CB will be called
     EVP_PKEY_ptr evp_pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, (void*)password.value_or("").c_str()));
 
