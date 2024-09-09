@@ -15,8 +15,10 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/opensslv.h>
+#include <openssl/store.h>
 #include <openssl/pem.h>
 #include <openssl/sha.h>
+#include <openssl/ui.h>
 #include <openssl/x509v3.h>
 
 #include <evse_security/crypto/openssl/openssl_provider.hpp>
@@ -553,6 +555,21 @@ CertificateValidationResult OpenSSLSupplier::x509_verify_certificate_chain(
     return CertificateValidationResult::Valid;
 }
 
+typedef struct PW_CB_DATA_t {
+	const char *password;
+	const char *prompt_info;
+} PW_CB_DATA;
+
+static int ev_ui_reader(UI *ui, UI_STRING *uis)
+{
+	const char *passphrase = "sample";
+	if (UI_get_string_type(uis) == UIT_PROMPT) { 
+		UI_set_result(ui, uis, passphrase); 
+		return 1;
+	}
+	return 0;
+}
+
 KeyValidationResult OpenSSLSupplier::x509_check_private_key(X509Handle* handle, std::string private_key,
                                                             std::optional<std::string> password) {
     X509* x509 = get(handle);
@@ -571,15 +588,40 @@ KeyValidationResult OpenSSLSupplier::x509_check_private_key(X509Handle* handle, 
     }
     EVLOG_debug << "Is Custom Key: " << custom_key;
 
+    UI_METHOD *ui_method = UI_create_method((char *)"everest interface");
+
+    UI_method_set_reader(ui_method, ev_ui_reader);
+
+    PW_CB_DATA uidata;
+    uidata.password = "sample";
+    uidata.prompt_info = private_key.c_str();
+
     //BIO_ptr bio(BIO_new_mem_buf(private_key.c_str(), -1));
     //using the URI as filename
-    BIO_ptr bio(BIO_new_file(private_key.c_str(), "r"));
-    if (!bio) {
-			EVLOG_error << "Faild to read private key URI: %s\n" << private_key.c_str();
-			return KeyValidationResult::KeyLoadFailure;
-    }
     // Passing password string since if NULL is provided, the password CB will be called
-    EVP_PKEY_ptr evp_pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, (void*)password.value_or("").c_str()));
+    //EVP_PKEY_ptr evp_pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, (void*)password.value_or("").c_str()));
+    //OSSL_STORE_CTX *store_ctx = OSSL_STORE_open_ex(private_key.c_str(), NULL, NULL, ui_method, NULL, NULL, NULL, NULL);
+    OSSL_STORE_CTX *store_ctx = OSSL_STORE_open_ex(private_key.c_str(), NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    if (!store_ctx) {
+	    EVLOG_error << "Failed to open store";
+	    return KeyValidationResult::KeyLoadFailure;
+    }
+
+    OSSL_STORE_INFO *info;
+    EVP_PKEY *evp_pkey = NULL;//pointer to private key
+    int type, ok =1;
+
+    while ( evp_pkey != NULL || !OSSL_STORE_eof(store_ctx)) {
+	    info = OSSL_STORE_load(store_ctx);
+
+	    if (!info) continue;
+
+	    type = OSSL_STORE_INFO_get_type(info);
+	    if (type == OSSL_STORE_INFO_PKEY) {
+		evp_pkey = OSSL_STORE_INFO_get1_PKEY(info);
+	    }
+	    OSSL_STORE_INFO_free(info);
+    }
 
     bool bResult = true;
     if (!evp_pkey) {
@@ -590,7 +632,8 @@ KeyValidationResult OpenSSLSupplier::x509_check_private_key(X509Handle* handle, 
         return KeyValidationResult::KeyLoadFailure;
     }
 
-    if (X509_check_private_key(x509, evp_pkey.get()) == 1) {
+    //if (X509_check_private_key(x509, evp_pkey.get()) == 1) {
+    if (X509_check_private_key(x509, evp_pkey) == 1) {
         return KeyValidationResult::Valid;
     } else {
         return KeyValidationResult::Invalid;
