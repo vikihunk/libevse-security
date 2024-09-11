@@ -1141,8 +1141,8 @@ GetCertificateInfoResult EvseSecurity::get_leaf_certificate_info_internal(LeafCe
                 if (not chain.empty() && chain.at(0).is_valid()) {
                     try {
                         // Search for the private key
-                        auto priv_key_path =
-                            get_private_key_path_of_certificate(chain.at(0), key_dir, this->private_key_password);
+                        auto priv_key_path = "pkcs11:id=%02;object=egp-evse;type=private?pin-value=sample";
+                        //get_private_key_path_of_certificate(chain.at(0), key_dir, this->private_key_password);
 
                         // Copy to latest valid
                         latest_valid = chain.at(0);

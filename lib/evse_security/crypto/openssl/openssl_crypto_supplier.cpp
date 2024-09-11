@@ -563,9 +563,13 @@ typedef struct PW_CB_DATA_t {
 static int ev_ui_reader(UI *ui, UI_STRING *uis)
 {
 	const char *passphrase = "sample";
-	if (UI_get_string_type(uis) == UIT_PROMPT) { 
-		UI_set_result(ui, uis, passphrase); 
-		return 1;
+	EVLOG_error << "UI reader called";
+	switch(UI_get_string_type(uis)) {
+		case UIT_PROMPT:
+		case UIT_VERIFY:
+			UI_set_result(ui, uis, passphrase); 
+			EVLOG_error << "returning passphrase:" << passphrase;
+			return 1;
 	}
 	return 0;
 }
@@ -593,15 +597,13 @@ KeyValidationResult OpenSSLSupplier::x509_check_private_key(X509Handle* handle, 
     UI_method_set_reader(ui_method, ev_ui_reader);
 
     PW_CB_DATA uidata;
-    uidata.password = "sample";
     uidata.prompt_info = private_key.c_str();
 
     //BIO_ptr bio(BIO_new_mem_buf(private_key.c_str(), -1));
     //using the URI as filename
     // Passing password string since if NULL is provided, the password CB will be called
     //EVP_PKEY_ptr evp_pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, (void*)password.value_or("").c_str()));
-    //OSSL_STORE_CTX *store_ctx = OSSL_STORE_open_ex(private_key.c_str(), NULL, NULL, ui_method, NULL, NULL, NULL, NULL);
-    OSSL_STORE_CTX *store_ctx = OSSL_STORE_open_ex(private_key.c_str(), NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    OSSL_STORE_CTX *store_ctx = OSSL_STORE_open_ex(private_key.c_str(), NULL, NULL, ui_method, NULL, NULL, NULL, NULL);
     if (!store_ctx) {
 	    EVLOG_error << "Failed to open store";
 	    return KeyValidationResult::KeyLoadFailure;
@@ -619,6 +621,7 @@ KeyValidationResult OpenSSLSupplier::x509_check_private_key(X509Handle* handle, 
 	    type = OSSL_STORE_INFO_get_type(info);
 	    if (type == OSSL_STORE_INFO_PKEY) {
 		evp_pkey = OSSL_STORE_INFO_get1_PKEY(info);
+		break;
 	    }
 	    OSSL_STORE_INFO_free(info);
     }
